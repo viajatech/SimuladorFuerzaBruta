@@ -9,6 +9,8 @@ Recuerda darme créditos si usas mi script. lo puedes hacer también en mis rede
 ![](https://github.com/viajatech/SimuladorFuerzaBruta/blob/main/TiempoCombinaciones.png)
 
 
-https://github.com/viajatech/SimuladorFuerzaBruta/blob/main/ataque.png
+![](https://github.com/viajatech/SimuladorFuerzaBruta/blob/main/ataque.png)
 
-https://github.com/viajatech/SimuladorFuerzaBruta/blob/main/Contrase%C3%B1aEncontrada.png
+![](https://github.com/viajatech/SimuladorFuerzaBruta/blob/main/Contrase%C3%B1aEncontrada.png)
+
+![](https://github.com/viajatech/SimuladorFuerzaBruta/blob/main/ResultadoFinal.png)
