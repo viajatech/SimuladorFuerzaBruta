@@ -1,0 +1,72 @@
+import itertools
+import string
+import time
+import tkinter as tk
+from tkinter import messagebox
+
+# Función para simular la verificación de contraseña
+def verificar_contraseña(contrasena_intento, contrasena_real):
+    return contrasena_intento == contrasena_real
+
+# Generador de combinaciones de contraseñas
+def generar_contraseñas(longitud):
+    caracteres = string.ascii_letters + string.digits + string.punctuation
+    for contrasena in itertools.product(caracteres, repeat=longitud):
+        yield ''.join(contrasena)
+
+# Función para iniciar el ataque de fuerza bruta
+def iniciar_ataque(contrasena_real):
+    inicio = time.time()
+    ultimo_reporte = inicio
+
+    encontrada = False
+    longitud_maxima = 8  # Puedes ajustar la longitud máxima según sea necesario
+    contador = 0
+
+    # Informar al usuario que el programa ha comenzado
+    messagebox.showinfo("Progreso", "El ataque de fuerza bruta ha comenzado.")
+
+    for longitud in range(1, longitud_maxima + 1):
+        for contrasena_intento in generar_contraseñas(longitud):
+            contador += 1
+            if verificar_contraseña(contrasena_intento, contrasena_real):
+                encontrada = True
+                messagebox.showinfo("Resultado", f"Contraseña encontrada: {contrasena_intento}")
+                break
+            if time.time() - ultimo_reporte >= 300:  # Mostrar progreso cada 5 minutos (300 segundos)
+                progreso = f"Intentos: {contador}, Tiempo transcurrido: {time.time() - inicio:.2f} segundos"
+                print(progreso)
+                messagebox.showinfo("Progreso", progreso)
+                ultimo_reporte = time.time()
+        if encontrada:
+            break
+
+    fin = time.time()
+    resultado_final = f"Tiempo total: {fin - inicio:.2f} segundos\nTotal de combinaciones generadas: {contador}"
+    print(resultado_final)
+    messagebox.showinfo("Resultado Final", resultado_final)
+
+# Función para manejar el botón de inicio
+def iniciar():
+    contrasena_real = entry.get()
+    if contrasena_real:
+        iniciar_ataque(contrasena_real)
+    else:
+        messagebox.showwarning("Advertencia", "Por favor, ingresa una contraseña.")
+
+# Crear la ventana principal
+root = tk.Tk()
+root.title("Ataque de Fuerza Bruta con CPU")
+
+# Crear y colocar los widgets
+label = tk.Label(root, text="Ingresa la contraseña a descifrar:")
+label.pack(pady=10)
+
+entry = tk.Entry(root)
+entry.pack(pady=5)
+
+button = tk.Button(root, text="Iniciar Ataque", command=iniciar)
+button.pack(pady=20)
+
+# Iniciar el bucle principal de la GUI
+root.mainloop()
