@@ -1,0 +1,203 @@
+import os
+import itertools
+import string
+import time
+import tkinter as tk
+from tkinter import messagebox, filedialog, ttk
+from threading import Thread
+from scapy.all import *
+import wmi
+import subprocess
+
+# Configurar Scapy para usar Npcap
+conf.use_pcap = True
+
+# Inicializar la variable diccionario
+diccionario = []
+
+# Función para simular la verificación de contraseña
+def verificar_contraseña(contrasena_intento, contrasena_real):
+    return contrasena_intento == contrasena_real
+
+# Generador de combinaciones de contraseñas
+def generar_contraseñas(longitud):
+    caracteres = string.ascii_letters + string.digits + string.punctuation
+    for contrasena in itertools.product(caracteres, repeat=longitud):
+        yield ''.join(contrasena)
+
+# Función para cargar el diccionario de contraseñas
+def cargar_diccionario():
+    file_path = filedialog.askopenfilename(title="Seleccionar archivo de diccionario", filetypes=[("Text files", "*.txt")])
+    if file_path:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
+            diccionario = file.read().splitlines()
+        return diccionario
+    return []
+
+# Función para iniciar el ataque de fuerza bruta
+def iniciar_ataque(contrasena_real, diccionario):
+    inicio = time.time()
+    ultimo_reporte = inicio
+
+    encontrada = False
+    longitud_maxima = 8  # Puedes ajustar la longitud máxima según sea necesario
+    contador = 0
+
+    # Informar al usuario que el programa ha comenzado
+    messagebox.showinfo("Progreso", "El ataque de fuerza bruta ha comenzado.")
+
+    # Intentar con el diccionario primero
+    for contrasena_intento in diccionario:
+        contador += 1
+        if verificar_contraseña(contrasena_intento, contrasena_real):
+            encontrada = True
+            messagebox.showinfo("Resultado", f"Contraseña encontrada: {contrasena_intento}")
+            break
+        if time.time() - ultimo_reporte >= 300:  # Mostrar progreso cada 5 minutos (300 segundos)
+            progreso = f"Intentos: {contador}, Tiempo transcurrido: {time.time() - inicio:.2f} segundos"
+            print(progreso)
+            messagebox.showinfo("Progreso", progreso)
+            ultimo_reporte = time.time()
+    if encontrada:
+        fin = time.time()
+        resultado_final = f"Tiempo total: {fin - inicio:.2f} segundos\nTotal de combinaciones generadas: {contador}"
+        print(resultado_final)
+        messagebox.showinfo("Resultado Final", resultado_final)
+        return
+
+    # Si no se encuentra en el diccionario, usar fuerza bruta
+    for longitud in range(1, longitud_maxima + 1):
+        for contrasena_intento in generar_contraseñas(longitud):
+            contador += 1
+            if verificar_contraseña(contrasena_intento, contrasena_real):
+                encontrada = True
+                messagebox.showinfo("Resultado", f"Contraseña encontrada: {contrasena_intento}")
+                break
+            if time.time() - ultimo_reporte >= 300:  # Mostrar progreso cada 5 minutos (300 segundos)
+                progreso = f"Intentos: {contador}, Tiempo transcurrido: {time.time() - inicio:.2f} segundos"
+                print(progreso)
+                messagebox.showinfo("Progreso", progreso)
+                ultimo_reporte = time.time()
+        if encontrada:
+            break
+
+    fin = time.time()
+    resultado_final = f"Tiempo total: {fin - inicio:.2f} segundos\nTotal de combinaciones generadas: {contador}"
+    print(resultado_final)
+    messagebox.showinfo("Resultado Final", resultado_final)
+
+# Función para manejar el botón de inicio
+def iniciar():
+    contrasena_real = entry.get()
+    if contrasena_real:
+        # Ejecutar el ataque en un hilo separado
+        Thread(target=iniciar_ataque, args=(contrasena_real, diccionario)).start()
+    else:
+        messagebox.showwarning("Advertencia", "Por favor, ingresa una contraseña.")
+
+# Función para manejar el botón de cargar diccionario
+def cargar():
+    global diccionario
+    diccionario = cargar_diccionario()
+    if diccionario:
+        messagebox.showinfo("Diccionario Cargado", f"Se han cargado {len(diccionario)} contraseñas del diccionario.")
+
+# Función para obtener el GUID de una interfaz de red
+def get_interface_guid(interface_name):
+    result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'], capture_output=True, text=True)
+    output = result.stdout
+    lines = output.splitlines()
+    guid = None
+    for i, line in enumerate(lines):
+        if interface_name in line:
+            for j in range(i, len(lines)):
+                if "GUID" in lines[j]:
+                    guid = lines[j].split(":")[1].strip()
+                    break
+            break
+    return guid
+
+# Función para escanear redes WiFi
+def escanear_redes(iface):
+    redes = []
+
+    def callback(packet):
+        if packet.haslayer(Dot11Beacon):
+            ssid = packet[Dot11Elt].info.decode()
+            bssid = packet[Dot11].addr2
+            dbi = packet.dBm_AntSignal
+            redes.append((ssid, bssid, dbi))
+
+    # Obtener el GUID de la interfaz
+    guid = get_interface_guid(iface)
+    if not guid:
+        messagebox.showerror("Error", f"No se pudo obtener el GUID para la interfaz {iface}")
+        return redes
+
+    # Verificar y cambiar a modo monitor
+    try:
+        command_monitor = f'WlanHelper {guid} mode monitor'
+        print(f"Ejecutando comando: {command_monitor}")
+        os.system(command_monitor)
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo cambiar a modo monitor: {str(e)}")
+        return redes
+
+    sniff(prn=callback, iface=iface, timeout=10)
+
+    # Restaurar el modo de la interfaz
+    try:
+        command_managed = f'WlanHelper {guid} mode managed'
+        print(f"Ejecutando comando: {command_managed}")
+        os.system(command_managed)
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo restaurar el modo de la interfaz: {str(e)}")
+
+    redes.sort(key=lambda x: x[2], reverse=True)
+    return redes
+
+# Función para manejar el botón de modo monitor
+def modo_monitor():
+    iface = combo.get()  # Obtener la interfaz seleccionada
+    redes = escanear_redes(iface)
+    if redes:
+        resultado = "\n".join([f"SSID: {ssid}, BSSID: {bssid}, dBm: {dbi}" for ssid, bssid, dbi in redes])
+        messagebox.showinfo("Redes WiFi Detectadas", resultado)
+    else:
+        messagebox.showinfo("Redes WiFi Detectadas", "No se encontraron redes WiFi. Asegúrate de que el adaptador WiFi esté en modo monitor y que esté funcionando correctamente.")
+
+# Crear la ventana principal
+root = tk.Tk()
+root.title("Ataque de Fuerza Bruta con CPU")
+
+# Crear y colocar los widgets
+label = tk.Label(root, text="Ingresa la contraseña a descifrar:")
+label.pack(pady=10)
+
+entry = tk.Entry(root)
+entry.pack(pady=5)
+
+button_iniciar = tk.Button(root, text="Iniciar Ataque", command=iniciar, bg="red", fg="white")
+button_iniciar.pack(pady=10)
+
+button_cargar = tk.Button(root, text="Cargar Diccionario", command=cargar, bg="green", fg="white")
+button_cargar.pack(pady=10)
+
+# Listar interfaces de red disponibles usando wmi
+c = wmi.WMI()
+interfaces = c.Win32_NetworkAdapterConfiguration(IPEnabled=True)
+interface_names = [iface.Description for iface in interfaces]
+combo = ttk.Combobox(root, values=interface_names)
+combo.set("Selecciona una interfaz de red")
+combo.pack(pady=10)
+
+button_monitor = tk.Button(root, text="WiFi Monitor", command=modo_monitor, bg="blue", fg="white")
+button_monitor.pack(pady=10)
+
+# Agregar el texto "powered by viaja tech" en la parte inferior
+footer = tk.Label(root, text="powered by viaja tech", font=("Arial", 10))
+footer.pack(side=tk.BOTTOM, pady=10)
+
+# Iniciar el bucle principal de la GUI
+root.mainloop()
+
